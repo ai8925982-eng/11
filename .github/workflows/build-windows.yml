@@ -1,26 +1,27 @@
-name: CI
+name: Build VST3 (untested wrapper)
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    tags: ["vst3-*"]
 
 jobs:
-  test:
+  vst3:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Configure
+        run: cmake -S vst3 -B vst3/build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build vst3/build --config Release --parallel
+      - name: Collect
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Get-ChildItem -Recurse vst3/build -Filter "*.vst3" -Directory | ForEach-Object { Copy-Item $_.FullName dist -Recurse }
+          Get-ChildItem -Recurse vst3/build -Filter "AI Music Generator.exe" | ForEach-Object { Copy-Item $_.FullName dist }
+          Get-ChildItem dist
+      - uses: actions/upload-artifact@v4
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: python -m pip install --upgrade pip numpy pytest soundfile
-      - name: Run tests
-        run: python -m pytest -q
-      - name: Smoke test CLI (generates a song)
-        run: python run_app.py -g all --bars 8 --seed 1 -o ci_output
-      - name: Verify GUI module imports (tkinter available)
-        run: python -c "import sys; sys.path.insert(0,'src'); import aimusicgen.gui"
+          name: AIMusicGenerator-VST3
+          path: dist
